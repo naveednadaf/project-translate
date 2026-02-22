@@ -4,16 +4,35 @@ floatingButton.id = 'project-translate-float';
 floatingButton.innerHTML = '<span>🌐</span>';
 floatingButton.title = 'Project Translate';
 
-// Drag functionality
+// Create close button
+const closeButton = document.createElement('button');
+closeButton.id = 'project-translate-close';
+closeButton.innerHTML = '×';
+closeButton.title = 'Close floating button';
+closeButton.addEventListener('click', (e) => {
+  e.stopPropagation();
+  floatingButton.style.display = 'none';
+  closeButton.style.display = 'none';
+});
+
+// Wrap button and close button in container
+const buttonContainer = document.createElement('div');
+buttonContainer.id = 'project-translate-container';
+buttonContainer.appendChild(floatingButton);
+buttonContainer.appendChild(closeButton);
+
+// Drag functionality for container
 let isDragging = false;
 let startX, startY, initialRight, initialBottom;
 
-floatingButton.addEventListener('mousedown', (e) => {
+buttonContainer.addEventListener('mousedown', (e) => {
+  if (e.target === closeButton) return; // Don't drag when clicking close button
+
   isDragging = true;
   startX = e.clientX;
   startY = e.clientY;
 
-  const rect = floatingButton.getBoundingClientRect();
+  const rect = buttonContainer.getBoundingClientRect();
   initialRight = window.innerWidth - rect.right;
   initialBottom = window.innerHeight - rect.bottom;
 
@@ -39,8 +58,8 @@ document.addEventListener('mousemove', (e) => {
   newRight = Math.max(padding, Math.min(maxRight, newRight));
   newBottom = Math.max(padding, Math.min(maxBottom, newBottom));
 
-  floatingButton.style.right = `${newRight}px`;
-  floatingButton.style.bottom = `${newBottom}px`;
+  buttonContainer.style.right = `${newRight}px`;
+  buttonContainer.style.bottom = `${newBottom}px`;
 });
 
 document.addEventListener('mouseup', () => {
@@ -583,4 +602,4 @@ floatingButton.addEventListener('mouseleave', () => {
 });
 
 // Add to page
-document.body.appendChild(floatingButton);
+document.body.appendChild(buttonContainer);
