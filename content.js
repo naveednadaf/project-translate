@@ -4,59 +4,11 @@ floatingButton.id = 'project-translate-float';
 floatingButton.innerHTML = '<span>🌐</span>';
 floatingButton.title = 'Project Translate';
 
-// Create toggle slider below the button
-const toggleContainer = document.createElement('div');
-toggleContainer.id = 'project-translate-toggle-container';
-
-const toggleSlider = document.createElement('label');
-toggleSlider.className = 'toggle-slider';
-toggleSlider.title = 'Toggle translation on/off';
-
-const toggleCheckbox = document.createElement('input');
-toggleCheckbox.type = 'checkbox';
-toggleCheckbox.id = 'project-translate-toggle';
-toggleCheckbox.checked = false; // Off by default
-
-const toggleTrack = document.createElement('span');
-toggleTrack.className = 'toggle-track';
-
-const toggleThumb = document.createElement('span');
-toggleThumb.className = 'toggle-thumb';
-
-toggleSlider.appendChild(toggleCheckbox);
-toggleSlider.appendChild(toggleTrack);
-toggleTrack.appendChild(toggleThumb);
-toggleContainer.appendChild(toggleSlider);
-
-// Track original and translated text for toggle
-const translationCache = new Map(); // node -> { original, translated }
-
-// Toggle change handler
-toggleCheckbox.addEventListener('change', () => {
-  const isChecked = toggleCheckbox.checked;
-  console.log('🔘 Toggle:', isChecked ? 'ON (show translation)' : 'OFF (show original)');
-
-  // Apply toggle state to all translated nodes
-  translationCache.forEach((cache, node) => {
-    try {
-      if (isChecked) {
-        // Show translation
-        node.textContent = cache.translated;
-      } else {
-        // Show original
-        node.textContent = cache.original;
-      }
-    } catch (e) {
-      console.error('❌ Toggle failed:', e);
-    }
-  });
-});
-
-// Drag functionality for both button and toggle
+// Drag functionality
 let isDragging = false;
 let startX, startY, initialRight, initialBottom;
 
-function startDrag(e) {
+floatingButton.addEventListener('mousedown', (e) => {
   isDragging = true;
   startX = e.clientX;
   startY = e.clientY;
@@ -66,9 +18,9 @@ function startDrag(e) {
   initialBottom = window.innerHeight - rect.bottom;
 
   floatingButton.style.cursor = 'grabbing';
-}
+});
 
-function handleDrag(e) {
+document.addEventListener('mousemove', (e) => {
   if (!isDragging) return;
 
   const deltaX = e.clientX - startX;
@@ -76,39 +28,27 @@ function handleDrag(e) {
 
   const buttonSize = 35;
   const padding = 10;
-  const toggleHeight = 30; // Extra space for toggle
 
   let newRight = initialRight - deltaX;
   let newBottom = initialBottom - deltaY;
 
   // Constrain to window bounds
   const maxRight = window.innerWidth - buttonSize - padding;
-  const maxBottom = window.innerHeight - buttonSize - toggleHeight - padding;
+  const maxBottom = window.innerHeight - buttonSize - padding;
 
   newRight = Math.max(padding, Math.min(maxRight, newRight));
   newBottom = Math.max(padding, Math.min(maxBottom, newBottom));
 
   floatingButton.style.right = `${newRight}px`;
   floatingButton.style.bottom = `${newBottom}px`;
+});
 
-  // Move toggle with button
-  toggleContainer.style.right = `${newRight}px`;
-  toggleContainer.style.bottom = `${newBottom + 40}px`; // 40px below button (button is 35px)
-}
-
-function endDrag() {
+document.addEventListener('mouseup', () => {
   if (isDragging) {
     isDragging = false;
     floatingButton.style.cursor = 'pointer';
   }
-}
-
-floatingButton.addEventListener('mousedown', startDrag);
-document.addEventListener('mousemove', handleDrag);
-document.addEventListener('mouseup', endDrag);
-
-// Also make toggle draggable
-toggleContainer.addEventListener('mousedown', startDrag);
+});
 
 // Track pending batch requests
 const pendingBatches = new Map();
@@ -124,8 +64,6 @@ function setButtonState(state) {
 
 // Map to track which text nodes belong to which text
 const textToNodesMap = new Map();
-
-// Extract non-English text nodes using TreeWalker
 function extractNonEnglishText() {
   const nonEnglishTexts = [];
 
@@ -489,11 +427,6 @@ function replaceTextNodes(originalText, translatedText, aiSuccess) {
   nodes.forEach(node => {
     try {
       console.log(`📝 Replacing node: "${node.textContent.trim()}" → "${translatedText}"`);
-
-      // Cache original and translated text for toggle
-      const original = node.textContent;
-      translationCache.set(node, { original, translated: translatedText });
-
       // Replace the text node content directly
       node.textContent = translatedText;
 
@@ -548,11 +481,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
         if (result.isComplete) {
           console.log('📊 All translations complete!');
           setButtonState('success');
-
-          // Auto-enable toggle to show translations
-          toggleCheckbox.checked = true;
-
-          // Keep button green permanently (no timeout to revert)
+          // Keep button green permanently
         }
 
         // Clean up storage
@@ -573,17 +502,18 @@ floatingButton.addEventListener('click', () => {
     }, (response) => {
       console.log('🛑 Translation cancelled:', response);
       // Revert all translated text back to original
-      translationCache.forEach((cache, node) => {
-        try {
-          node.textContent = cache.original;
-        } catch (e) {
-          console.error('❌ Revert failed:', e);
-        }
+      textToNodesMap.forEach((nodeSet, originalText) => {
+        nodeSet.forEach(node => {
+          try {
+            node.textContent = originalText;
+          } catch (e) {
+            console.error('❌ Revert failed:', e);
+          }
+        });
       });
-      // Clear cache and reset UI
-      translationCache.clear();
+      // Clear map and reset UI
+      textToNodesMap.clear();
       setButtonState(null);
-      toggleCheckbox.checked = false;
       currentBatchId = null;
     });
     return;
@@ -656,4 +586,3 @@ floatingButton.addEventListener('mouseleave', () => {
 
 // Add to page
 document.body.appendChild(floatingButton);
-document.body.appendChild(toggleContainer);
