@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project Translate Options</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 400px;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+    }
+    
+    h1 {
+      font-size: 20px;
+      margin-bottom: 20px;
+      color: #333;
+      text-align: center;
+    }
+    
+    .option-group {
+      background: #fff;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .option-group label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #555;
+    }
+    
+    .option-group input,
+    .option-group select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    
+    .option-group input:focus,
+    .option-group select:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+    }
+    
+    .option-group .hint {
+      font-size: 12px;
+      color: #888;
+      margin-top: 5px;
+    }
+    
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    
+    button {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    #save {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    #save:hover {
+      opacity: 0.9;
+    }
+    
+    #reset {
+      background: #e0e0e0;
+      color: #333;
+    }
+    
+    #reset:hover {
+      background: #d0d0d0;
+    }
+    
+    #status {
+      text-align: center;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 14px;
+      margin-top: 15px;
+      display: none;
+    }
+    
+    #status.success {
+      background: #d4edda;
+      color: #155724;
+      display: block;
+    }
+    
+    #status.error {
+      background: #f8d7da;
+      color: #721c24;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <h1>⚙️ Project Translate</h1>
+  
+  <div class="option-group">
+    <label for="model">Ollama Model</label>
+    <input type="text" id="model" placeholder="llama3.2">
+    <div class="hint">Model name to use for translations (e.g., llama3.2, qwen2.5:3b)</div>
+  </div>
+  
+  <div class="option-group">
+    <label for="maxConcurrent">Max Concurrent Requests</label>
+    <input type="number" id="maxConcurrent" min="1" max="10">
+    <div class="hint">Number of parallel translation requests (1-10)</div>
+  </div>
+  
+  <div class="option-group">
+    <label for="maxRetries">Max Retries</label>
+    <input type="number" id="maxRetries" min="0" max="5">
+    <div class="hint">Number of retry attempts per failed translation (0-5)</div>
+  </div>
+  
+  <div class="option-group">
+    <label for="timeout">Timeout (ms)</label>
+    <input type="number" id="timeout" min="5000" max="120000" step="1000">
+    <div class="hint">Request timeout in milliseconds (5000-120000)</div>
+  </div>
+  
+  <div class="option-group">
+    <label for="ollamaUrl">Ollama API URL</label>
+    <input type="text" id="ollamaUrl" placeholder="http://localhost:11434">
+    <div class="hint">URL of your Ollama API endpoint</div>
+  </div>
+  
+  <div class="button-group">
+    <button id="reset">Reset to Defaults</button>
+    <button id="save">Save Settings</button>
+  </div>
+  
+  <div id="status"></div>
+  
+  <script src="options.js"></script>
+</body>
+</html>
