@@ -216,6 +216,16 @@ function extractNonTargetLanguageText(targetLanguage) {
           return NodeFilter.FILTER_REJECT;
         }
 
+        // Skip text inside anchor tags that look like navigation/URLs
+        if (parent.tagName === 'A' && (parent.href.includes('/') || parent.textContent.trim().includes('/'))) {
+          return NodeFilter.FILTER_REJECT;
+        }
+
+        // Skip breadcrumb navigation
+        if (parent.closest('[aria-label*="breadcrumb"], .breadcrumb, nav[aria-label*="Breadcrumb"]')) {
+          return NodeFilter.FILTER_REJECT;
+        }
+
         if (parent.classList.contains('project-translate-done')) {
           return NodeFilter.FILTER_REJECT;
         }
@@ -239,27 +249,19 @@ function extractNonTargetLanguageText(targetLanguage) {
     const text = currentNode.textContent.trim();
 
     if (shouldSkipText(text)) {
-      console.log('⏭️ Skipping (symbols/emojis/short):', text);
+      console.log('⏭️ Skipping (symbols/emojis/short/URL):', text);
       continue;
     }
 
     // Check if text is likely NOT in target language
     if (!isLikelyTargetLanguage(text, targetLanguage)) {
-      const parts = extractNonTargetParts(text, targetLanguage);
+      nonTargetTexts.push(text);
+      console.log(`📝 Found text to translate to ${targetLanguage}:`, text);
 
-      if (parts.length > 0) {
-        parts.forEach(part => {
-          if (!shouldSkipText(part)) {
-            nonTargetTexts.push(part);
-            console.log(`📝 Found text to translate to ${targetLanguage}:`, part);
-
-            if (!textToNodesMap.has(part)) {
-              textToNodesMap.set(part, new Set());
-            }
-            textToNodesMap.get(part).add(currentNode);
-          }
-        });
+      if (!textToNodesMap.has(text)) {
+        textToNodesMap.set(text, new Set());
       }
+      textToNodesMap.get(text).add(currentNode);
     }
   }
 
@@ -294,53 +296,13 @@ function isLikelyTargetLanguage(text, targetLanguage) {
 
 // Extract parts of text that are not in target language
 function extractNonTargetParts(text, targetLanguage) {
-  const nonTargetParts = [];
-
-  // For simplicity, if text contains mixed scripts, extract non-target parts
-  const chars = text.split('');
-  let currentPart = '';
-  let isTargetLang = true;
-
-  const languagePatterns = {
-    'English': /[\x00-\x7F]/,
-    'Spanish': /[a-zA-Z\xC0-\xFFñÑ¿¡]/,
-    'French': /[a-zA-Z\xC0-\xFFœŒçÇ]/,
-    'German': /[a-zA-Z\xC0-\xFFäÄöÖüÜß]/,
-    'Chinese': /[\u4E00-\u9FFF]/,
-    'Japanese': /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/,
-    'Korean': /[\uAC00-\uD7AF]/,
-    'Russian': /[\u0400-\u04FF]/,
-    'Hindi': /[\u0900-\u097F]/,
-  };
-
-  const targetPattern = languagePatterns[targetLanguage] || /[\x00-\x7F]/;
-
-  for (const char of chars) {
-    const isCharTargetLang = targetPattern.test(char) || /[\s.,!?;:'"()\-]/.test(char);
-
-    if (isCharTargetLang !== isTargetLang) {
-      if (currentPart.trim().length > 1) {
-        if (!isTargetLang) {
-          nonTargetParts.push(currentPart.trim());
-        }
-      }
-      currentPart = char;
-      isTargetLang = isCharTargetLang;
-    } else {
-      currentPart += char;
-    }
+  // If text is already in target language, return empty
+  if (isLikelyTargetLanguage(text, targetLanguage)) {
+    return [];
   }
 
-  if (currentPart.trim().length > 1 && !isTargetLang) {
-    nonTargetParts.push(currentPart.trim());
-  }
-
-  // If no parts extracted but text doesn't match target language, return whole text
-  if (nonTargetParts.length === 0 && !isLikelyTargetLanguage(text, targetLanguage)) {
-    return [text];
-  }
-
-  return nonTargetParts;
+  // For non-target language text, return the whole text for translation
+  return [text];
 }
 
 // Debug: Log text node map
@@ -388,12 +350,27 @@ function isElementVisible(element) {
   return false;
 }
 
-// Check if text should be skipped (emojis, symbols, arrows, meaningless)
+// Check if text should be skipped (emojis, symbols, arrows, meaningless, URLs)
 function shouldSkipText(text) {
   const trimmed = text.trim();
 
   // Skip if empty or too short (less than 2 meaningful chars)
   if (trimmed.length < 2) return true;
+
+  // Skip URLs and URL-like patterns
+  if (/^https?:\/\//.test(trimmed) || /^www\./.test(trimmed) || /^\/[a-z\/]+$/.test(trimmed)) {
+    return true;
+  }
+
+  // Skip email addresses
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return true;
+  }
+
+  // Skip file paths
+  if (/^[\/\\][a-zA-Z0-9_\/\\.-]+$/.test(trimmed)) {
+    return true;
+  }
 
   // Regex patterns for things to skip
   const skipPatterns = [

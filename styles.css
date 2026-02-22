@@ -96,20 +96,18 @@
 #project-translate-float.loading {
   background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
   box-shadow: 0 4px 15px rgba(246, 211, 101, 0.4);
-  animation: pulse 1s ease-in-out infinite, shake 0.5s ease-in-out infinite;
+  animation: pulse 1s ease-in-out infinite;
   cursor: pointer;
 }
 
 #project-translate-float.loading::after {
-  content: '✖';
+  content: '';
   width: 16px;
   height: 16px;
-  color: white;
-  font-size: 20px;
-  font-weight: bold;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 #project-translate-float.loading span {
@@ -119,7 +117,7 @@
 #project-translate-float.loading:hover {
   background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
   box-shadow: 0 6px 20px rgba(255, 65, 108, 0.6);
-  transform: scale(1.1);
+  transform: scale(1.05);
 }
 
 /* Success state */
