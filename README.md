@@ -1,6 +1,6 @@
 # Project Translate 🌐
 
-A Chrome extension that translates non-English text on webpages using AI (Ollama) with a floating action button and real-time inline translations.
+A Open-source Chrome extension that translates webpages using AI (Ollama) with a floating action button and real-time inline translations.
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
