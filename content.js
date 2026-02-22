@@ -202,6 +202,147 @@ function extractNonEnglishText() {
   return [...new Set(nonEnglishTexts)]; // Unique texts only
 }
 
+// Extract text that is NOT in the target language
+function extractNonTargetLanguageText(targetLanguage) {
+  const nonTargetTexts = [];
+
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: (node) => {
+        const parent = node.parentElement;
+        if (!parent || parent.closest('script, style, noscript, meta, link')) {
+          return NodeFilter.FILTER_REJECT;
+        }
+
+        if (parent.classList.contains('project-translate-done')) {
+          return NodeFilter.FILTER_REJECT;
+        }
+
+        const text = node.textContent.trim();
+        if (!text || text.length < 2) {
+          return NodeFilter.FILTER_REJECT;
+        }
+
+        if (!isElementVisible(parent)) {
+          return NodeFilter.FILTER_REJECT;
+        }
+
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    }
+  );
+
+  let currentNode;
+  while ((currentNode = walker.nextNode())) {
+    const text = currentNode.textContent.trim();
+
+    if (shouldSkipText(text)) {
+      console.log('⏭️ Skipping (symbols/emojis/short):', text);
+      continue;
+    }
+
+    // Check if text is likely NOT in target language
+    if (!isLikelyTargetLanguage(text, targetLanguage)) {
+      const parts = extractNonTargetParts(text, targetLanguage);
+
+      if (parts.length > 0) {
+        parts.forEach(part => {
+          if (!shouldSkipText(part)) {
+            nonTargetTexts.push(part);
+            console.log(`📝 Found text to translate to ${targetLanguage}:`, part);
+
+            if (!textToNodesMap.has(part)) {
+              textToNodesMap.set(part, new Set());
+            }
+            textToNodesMap.get(part).add(currentNode);
+          }
+        });
+      }
+    }
+  }
+
+  return [...new Set(nonTargetTexts)];
+}
+
+// Check if text is likely in the target language
+function isLikelyTargetLanguage(text, targetLanguage) {
+  // Language-specific character patterns
+  const languagePatterns = {
+    'English': /^[\x00-\x7F\s.,!?;:'"()\-]+$/,
+    'Spanish': /^[a-zA-Z\xC0-\xFF\s.,!?;:'"()\-ñÑ¿¡]+$/,
+    'French': /^[a-zA-Z\xC0-\xFF\s.,!?;:'"()\-œŒçÇ]+$/,
+    'German': /^[a-zA-Z\xC0-\xFF\s.,!?;:'"()\-äÄöÖüÜß]+$/,
+    'Portuguese': /^[a-zA-Z\xC0-\xFF\s.,!?;:'"()\-ãÃõÕçÇ]+$/,
+    'Italian': /^[a-zA-Z\xC0-\xFF\s.,!?;:'"()\-]+$/,
+    'Dutch': /^[a-zA-Z\xC0-\xFF\s.,!?;:'"()\-]+$/,
+    'Russian': /^[a-zA-Z\u0400-\u04FF\s.,!?;:'"()\-]+$/,
+    'Chinese': /^[\u4E00-\u9FFF\s.,!?;:'"()\-]+$/,
+    'Japanese': /^[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\s.,!?;:'"()\-]+$/,
+    'Korean': /^[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F\s.,!?;:'"()\-]+$/,
+    'Hindi': /^[\u0900-\u097F\s.,!?;:'"()\-]+$/,
+  };
+
+  const pattern = languagePatterns[targetLanguage] || languagePatterns['English'];
+  if (pattern) {
+    return pattern.test(text);
+  }
+
+  return false;
+}
+
+// Extract parts of text that are not in target language
+function extractNonTargetParts(text, targetLanguage) {
+  const nonTargetParts = [];
+
+  // For simplicity, if text contains mixed scripts, extract non-target parts
+  const chars = text.split('');
+  let currentPart = '';
+  let isTargetLang = true;
+
+  const languagePatterns = {
+    'English': /[\x00-\x7F]/,
+    'Spanish': /[a-zA-Z\xC0-\xFFñÑ¿¡]/,
+    'French': /[a-zA-Z\xC0-\xFFœŒçÇ]/,
+    'German': /[a-zA-Z\xC0-\xFFäÄöÖüÜß]/,
+    'Chinese': /[\u4E00-\u9FFF]/,
+    'Japanese': /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/,
+    'Korean': /[\uAC00-\uD7AF]/,
+    'Russian': /[\u0400-\u04FF]/,
+    'Hindi': /[\u0900-\u097F]/,
+  };
+
+  const targetPattern = languagePatterns[targetLanguage] || /[\x00-\x7F]/;
+
+  for (const char of chars) {
+    const isCharTargetLang = targetPattern.test(char) || /[\s.,!?;:'"()\-]/.test(char);
+
+    if (isCharTargetLang !== isTargetLang) {
+      if (currentPart.trim().length > 1) {
+        if (!isTargetLang) {
+          nonTargetParts.push(currentPart.trim());
+        }
+      }
+      currentPart = char;
+      isTargetLang = isCharTargetLang;
+    } else {
+      currentPart += char;
+    }
+  }
+
+  if (currentPart.trim().length > 1 && !isTargetLang) {
+    nonTargetParts.push(currentPart.trim());
+  }
+
+  // If no parts extracted but text doesn't match target language, return whole text
+  if (nonTargetParts.length === 0 && !isLikelyTargetLanguage(text, targetLanguage)) {
+    return [text];
+  }
+
+  return nonTargetParts;
+}
+
 // Debug: Log text node map
 function logTextNodeMap() {
   console.log('📊 Text Node Map:');
@@ -472,41 +613,46 @@ floatingButton.addEventListener('click', () => {
   }
 
   console.log('🔵 Floating button clicked!');
-  console.log('🔍 Scanning page for non-English text...');
+  console.log('🔍 Scanning page for text to translate...');
 
-  // Extract non-English text from page
-  const nonEnglishTexts = extractNonEnglishText();
+  // Get target language from settings
+  chrome.storage.sync.get({ targetLanguage: 'English' }, (settings) => {
+    const targetLanguage = settings.targetLanguage || 'English';
 
-  if (nonEnglishTexts.length === 0) {
-    console.log('ℹ️ No non-English text found on this page');
-    return;
-  }
+    // Extract text that is NOT in target language
+    const nonTargetTexts = extractNonTargetLanguageText(targetLanguage);
 
-  console.log(`📦 Found ${nonEnglishTexts.length} non-English texts to translate:`);
-  nonEnglishTexts.forEach((text, i) => {
-    console.log(`  [${i + 1}] ${text}`);
-  });
-
-  // Set loading state
-  setButtonState('loading');
-
-  // Debug: Log what nodes we found
-  logTextNodeMap();
-
-  // Send to background for translation to English
-  chrome.runtime.sendMessage({
-    action: 'translateBatch',
-    texts: nonEnglishTexts,
-    targetLanguage: 'English'
-  }, (response) => {
-    console.log('🔵 Queue acknowledged:', response);
-    if (response && response.batchId) {
-      currentBatchId = response.batchId;
-      pendingBatches.set(response.batchId, {
-        status: 'processing',
-        count: nonEnglishTexts.length
-      });
+    if (nonTargetTexts.length === 0) {
+      console.log(`ℹ️ No text found that needs translation to ${targetLanguage}`);
+      return;
     }
+
+    console.log(`📦 Found ${nonTargetTexts.length} texts to translate to ${targetLanguage}:`);
+    nonTargetTexts.forEach((text, i) => {
+      console.log(`  [${i + 1}] ${text}`);
+    });
+
+    // Set loading state
+    setButtonState('loading');
+
+    // Debug: Log what nodes we found
+    logTextNodeMap();
+
+    // Send to background for translation
+    chrome.runtime.sendMessage({
+      action: 'translateBatch',
+      texts: nonTargetTexts,
+      targetLanguage: targetLanguage
+    }, (response) => {
+      console.log('🔵 Queue acknowledged:', response);
+      if (response && response.batchId) {
+        currentBatchId = response.batchId;
+        pendingBatches.set(response.batchId, {
+          status: 'processing',
+          count: nonTargetTexts.length
+        });
+      }
+    });
   });
 });
 

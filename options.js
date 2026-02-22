@@ -1,6 +1,7 @@
 // Default settings
 const DEFAULTS = {
   model: 'llama3.2',
+  targetLanguage: 'English',
   maxConcurrent: 3,
   maxRetries: 2,
   timeout: 30000,
@@ -11,23 +12,25 @@ const DEFAULTS = {
 document.addEventListener('DOMContentLoaded', async () => {
   // Load from storage
   const result = await chrome.storage.sync.get(DEFAULTS);
-  
+
   // Populate form
   document.getElementById('model').value = result.model;
+  document.getElementById('targetLanguage').value = result.targetLanguage;
   document.getElementById('maxConcurrent').value = result.maxConcurrent;
   document.getElementById('maxRetries').value = result.maxRetries;
   document.getElementById('timeout').value = result.timeout;
   document.getElementById('ollamaUrl').value = result.ollamaUrl;
-  
+
   // Save button
   document.getElementById('save').addEventListener('click', saveSettings);
-  
+
   // Reset button
   document.getElementById('reset').addEventListener('click', resetSettings);
 });
 
 async function saveSettings() {
   const model = document.getElementById('model').value.trim() || DEFAULTS.model;
+  const targetLanguage = document.getElementById('targetLanguage').value || DEFAULTS.targetLanguage;
   const maxConcurrent = parseInt(document.getElementById('maxConcurrent').value) || DEFAULTS.maxConcurrent;
   const maxRetries = parseInt(document.getElementById('maxRetries').value) || DEFAULTS.maxRetries;
   const timeout = parseInt(document.getElementById('timeout').value) || DEFAULTS.timeout;
@@ -53,6 +56,7 @@ async function saveSettings() {
   // Save to storage
   await chrome.storage.sync.set({
     model,
+    targetLanguage,
     maxConcurrent,
     maxRetries,
     timeout,
@@ -67,9 +71,10 @@ async function saveSettings() {
 
 async function resetSettings() {
   await chrome.storage.sync.set(DEFAULTS);
-  
+
   // Populate form with defaults
   document.getElementById('model').value = DEFAULTS.model;
+  document.getElementById('targetLanguage').value = DEFAULTS.targetLanguage;
   document.getElementById('maxConcurrent').value = DEFAULTS.maxConcurrent;
   document.getElementById('maxRetries').value = DEFAULTS.maxRetries;
   document.getElementById('timeout').value = DEFAULTS.timeout;

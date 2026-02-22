@@ -1,6 +1,7 @@
 // Ollama API configuration - will be loaded from storage
 let OLLAMA_API_URL = 'http://localhost:11434/api/generate';
 let OLLAMA_MODEL = 'llama3.2';
+let TARGET_LANGUAGE = 'English';
 let MAX_CONCURRENT = 3;
 let MAX_RETRIES = 2;
 let TIMEOUT_MS = 30000;
@@ -8,6 +9,7 @@ let TIMEOUT_MS = 30000;
 // Default settings
 const DEFAULTS = {
   model: 'llama3.2',
+  targetLanguage: 'English',
   maxConcurrent: 3,
   maxRetries: 2,
   timeout: 30000,
@@ -19,6 +21,7 @@ async function loadSettings() {
   try {
     const result = await chrome.storage.sync.get(DEFAULTS);
     OLLAMA_MODEL = result.model || DEFAULTS.model;
+    TARGET_LANGUAGE = result.targetLanguage || DEFAULTS.targetLanguage;
     MAX_CONCURRENT = result.maxConcurrent || DEFAULTS.maxConcurrent;
     MAX_RETRIES = result.maxRetries || DEFAULTS.maxRetries;
     TIMEOUT_MS = result.timeout || DEFAULTS.timeout;
@@ -26,6 +29,7 @@ async function loadSettings() {
 
     console.log('📊 Settings loaded:', {
       model: OLLAMA_MODEL,
+      targetLanguage: TARGET_LANGUAGE,
       maxConcurrent: MAX_CONCURRENT,
       maxRetries: MAX_RETRIES,
       timeout: TIMEOUT_MS,
@@ -262,7 +266,10 @@ async function translateWithTimeout(text, targetLanguage, requestId) {
   activeControllers.set(requestId, { controller, timeoutId });
 
   try {
-    const prompt = `Translate the following text to ${targetLanguage}.
+    // Use the targetLanguage parameter if provided, otherwise use global setting
+    const lang = targetLanguage || TARGET_LANGUAGE;
+
+    const prompt = `Translate the following text to ${lang}.
 Respond ONLY with a valid JSON object in this exact format:
 {"translation": "your translation here", "success": true}
 
