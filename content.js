@@ -62,8 +62,35 @@ function setButtonState(state) {
   }
 }
 
+// Import franc for language detection
+import { franc } from 'https://cdn.jsdelivr.net/npm/franc@6.0.0/+esm';
+
+// Map franc language codes to our language names
+const LANGUAGE_MAP = {
+  'eng': 'English',
+  'spa': 'Spanish',
+  'fra': 'French',
+  'deu': 'German',
+  'por': 'Portuguese',
+  'ita': 'Italian',
+  'nld': 'Dutch',
+  'rus': 'Russian',
+  'cmn': 'Chinese',
+  'jpn': 'Japanese',
+  'kor': 'Korean',
+  'hin': 'Hindi',
+  'und': 'Unknown'
+};
+
+// Detect language of text using franc
+function detectLanguage(text) {
+  const francCode = franc(text, { minLength: 3 });
+  return LANGUAGE_MAP[francCode] || 'Unknown';
+}
+
 // Map to track which text nodes belong to which text
 const textToNodesMap = new Map();
+
 function extractNonEnglishText() {
   const nonEnglishTexts = [];
 
@@ -191,56 +218,27 @@ function extractNonTargetLanguageText(targetLanguage) {
       continue;
     }
 
-    // Check if text is likely NOT in target language
-    if (!isLikelyTargetLanguage(text, targetLanguage)) {
-      nonTargetTexts.push(text);
-      console.log(`📝 Found text to translate to ${targetLanguage}:`, text);
+    // Detect language using franc
+    const detectedLang = detectLanguage(text);
+    console.log(`🔍 Detected "${text.substring(0, 30)}..." as ${detectedLang}`);
 
-      if (!textToNodesMap.has(text)) {
-        textToNodesMap.set(text, new Set());
-      }
-      textToNodesMap.get(text).add(currentNode);
+    // Compare with target language
+    if (detectedLang === targetLanguage || detectedLang === 'Unknown') {
+      console.log(`⏭️ Skipping (same as target or unknown): ${detectedLang}`);
+      continue;
     }
+
+    // Different language - add to translation queue
+    nonTargetTexts.push(text);
+    console.log(`📝 Found text to translate (${detectedLang} → ${targetLanguage}):`, text);
+
+    if (!textToNodesMap.has(text)) {
+      textToNodesMap.set(text, new Set());
+    }
+    textToNodesMap.get(text).add(currentNode);
   }
 
   return [...new Set(nonTargetTexts)];
-}
-
-// Check if text is likely in the target language
-function isLikelyTargetLanguage(text, targetLanguage) {
-  // Language-specific character patterns
-  const languagePatterns = {
-    'English': /^[\x00-\x7F\s.,!?;:'"()\-]+$/,
-    'Spanish': /^[a-zA-Z\xC0-\xFF\s.,!?;:'"()\-ñÑ¿¡]+$/,
-    'French': /^[a-zA-Z\xC0-\xFF\s.,!?;:'"()\-œŒçÇ]+$/,
-    'German': /^[a-zA-Z\xC0-\xFF\s.,!?;:'"()\-äÄöÖüÜß]+$/,
-    'Portuguese': /^[a-zA-Z\xC0-\xFF\s.,!?;:'"()\-ãÃõÕçÇ]+$/,
-    'Italian': /^[a-zA-Z\xC0-\xFF\s.,!?;:'"()\-]+$/,
-    'Dutch': /^[a-zA-Z\xC0-\xFF\s.,!?;:'"()\-]+$/,
-    'Russian': /^[a-zA-Z\u0400-\u04FF\s.,!?;:'"()\-]+$/,
-    'Chinese': /^[\u4E00-\u9FFF\s.,!?;:'"()\-]+$/,
-    'Japanese': /^[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\s.,!?;:'"()\-]+$/,
-    'Korean': /^[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F\s.,!?;:'"()\-]+$/,
-    'Hindi': /^[\u0900-\u097F\s.,!?;:'"()\-]+$/,
-  };
-
-  const pattern = languagePatterns[targetLanguage] || languagePatterns['English'];
-  if (pattern) {
-    return pattern.test(text);
-  }
-
-  return false;
-}
-
-// Extract parts of text that are not in target language
-function extractNonTargetParts(text, targetLanguage) {
-  // If text is already in target language, return empty
-  if (isLikelyTargetLanguage(text, targetLanguage)) {
-    return [];
-  }
-
-  // For non-target language text, return the whole text for translation
-  return [text];
 }
 
 // Debug: Log text node map
