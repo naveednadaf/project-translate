@@ -98,6 +98,8 @@ document.addEventListener('mouseup', () => {
 // Track pending batch requests
 const pendingBatches = new Map();
 let currentBatchId = null; // Track current active batch
+let isTranslationActive = false; // Track if translations are currently shown
+let completedTranslations = []; // Store completed translation results
 
 // Set button state
 function setButtonState(state) {
@@ -200,14 +202,19 @@ function extractNonTargetLanguageText(targetLanguage) {
           return NodeFilter.FILTER_REJECT;
         }
 
-        // Skip text inside anchor tags that look like navigation/URLs
-        if (parent.tagName === 'A' && (parent.href.includes('/') || parent.textContent.trim().includes('/'))) {
+        // Skip breadcrumb navigation only (not all links)
+        if (parent.closest('[aria-label*="breadcrumb"], .breadcrumb, nav[aria-label*="Breadcrumb"]')) {
           return NodeFilter.FILTER_REJECT;
         }
 
-        // Skip breadcrumb navigation
-        if (parent.closest('[aria-label*="breadcrumb"], .breadcrumb, nav[aria-label*="Breadcrumb"]')) {
-          return NodeFilter.FILTER_REJECT;
+        // Skip links that are clearly navigation/URL patterns (not content links)
+        if (parent.tagName === 'A') {
+          const href = parent.href || '';
+          const text = parent.textContent.trim();
+          // Skip if href is just a path like /store/apps/details
+          if (href.match(/^\/[a-z\/]+$/i) || text.match(/^›.*›.*›$/)) {
+            return NodeFilter.FILTER_REJECT;
+          }
         }
 
         if (parent.classList.contains('project-translate-done')) {
@@ -432,7 +439,7 @@ function isEnglishPart(text) {
 }
 
 // Replace text in specific text nodes
-function replaceTextNodes(originalText, translatedText, aiSuccess) {
+function replaceTextNodes(originalText, translatedText, aiSuccess, silentMode = false) {
   const nodeSet = textToNodesMap.get(originalText);
   if (!nodeSet || nodeSet.size === 0) {
     console.warn('⚠️ No nodes found for:', originalText);
@@ -450,21 +457,25 @@ function replaceTextNodes(originalText, translatedText, aiSuccess) {
   const nodes = Array.from(nodeSet);
   nodes.forEach(node => {
     try {
-      console.log(`📝 Replacing node: "${node.textContent.trim()}" → "${translatedText}"`);
+      if (!silentMode) {
+        console.log(`📝 Replacing node: "${node.textContent.trim()}" → "${translatedText}"`);
+      }
       // Replace the text node content directly
       node.textContent = translatedText;
 
       // Mark parent as translated (for skipping later)
       node.parentElement.classList.add('project-translate-done');
 
-      // Highlight the translation
-      const parent = node.parentElement;
-      parent.style.backgroundColor = '#fff3cd';
-      parent.style.transition = 'background-color 0.3s';
-      setTimeout(() => {
-        parent.style.transition = 'background-color 1s';
-        parent.style.backgroundColor = 'transparent';
-      }, 500);
+      // Highlight the translation (only in non-silent mode)
+      if (!silentMode) {
+        const parent = node.parentElement;
+        parent.style.backgroundColor = '#fff3cd';
+        parent.style.transition = 'background-color 0.3s';
+        setTimeout(() => {
+          parent.style.transition = 'background-color 1s';
+          parent.style.backgroundColor = 'transparent';
+        }, 500);
+      }
 
       replacedCount++;
     } catch (e) {
@@ -486,6 +497,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
         if (result.data !== undefined) {
           const item = result.data;
 
+          // Store completed translation
+          if (item.success) {
+            completedTranslations.push(item);
+          }
+
           if (item.success) {
             console.log(`✅ Translated: "${item.text}" → ${item.data}`);
             // Replace in DOM immediately, checking AI's success flag
@@ -497,7 +513,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
             }
           } else {
             console.log(`❌ Failed: "${item.text}" - ${item.error}`);
-            // Do NOT replace - leave original text
+            // Store failed translation for retry
+            completedTranslations.push(item);
           }
         }
 
@@ -505,6 +522,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
         if (result.isComplete) {
           console.log('📊 All translations complete!');
           setButtonState('success');
+          isTranslationActive = true;
           // Keep button green permanently
         }
 
@@ -539,16 +557,78 @@ floatingButton.addEventListener('click', () => {
       textToNodesMap.clear();
       setButtonState(null);
       currentBatchId = null;
+      isTranslationActive = false;
+      completedTranslations = [];
     });
     return;
   }
 
+  // If translations are active, toggle OFF (revert to original)
+  if (isTranslationActive) {
+    console.log('🔴 Turning translations OFF');
+    textToNodesMap.forEach((nodeSet, originalText) => {
+      nodeSet.forEach(node => {
+        try {
+          node.textContent = originalText;
+        } catch (e) {
+          console.error('❌ Revert failed:', e);
+        }
+      });
+    });
+    setButtonState(null);
+    isTranslationActive = false;
+    return;
+  }
+
+  // If translations exist but are inactive, toggle ON (show cached translations)
+  if (completedTranslations.length > 0 && textToNodesMap.size > 0) {
+    console.log('🟢 Turning translations ON (showing cached)');
+    // Re-apply successful translations
+    completedTranslations.forEach(item => {
+      if (item.success && item.aiSuccess !== false) {
+        replaceTextNodes(item.text, item.data, item.aiSuccess, true); // silent mode
+      }
+    });
+    setButtonState('success');
+    isTranslationActive = true;
+    return;
+  }
+
+  // Start new translation
   console.log('🔵 Floating button clicked!');
   console.log('🔍 Scanning page for text to translate...');
 
   // Get target language from settings
   chrome.storage.sync.get({ targetLanguage: 'English' }, (settings) => {
     const targetLanguage = settings.targetLanguage || 'English';
+
+    // Check if we have failed translations to retry
+    const failedTranslations = completedTranslations.filter(item => !item.success || item.aiSuccess === false);
+
+    if (failedTranslations.length > 0) {
+      console.log(`🔄 Found ${failedTranslations.length} failed translations to retry`);
+      // Clear previous data and retry failed ones
+      textToNodesMap.clear();
+      completedTranslations = [];
+      setButtonState('loading');
+
+      // Send failed translations for retry
+      chrome.runtime.sendMessage({
+        action: 'translateBatch',
+        texts: failedTranslations.map(item => item.text),
+        targetLanguage: targetLanguage
+      }, (response) => {
+        console.log('🔵 Retry queue acknowledged:', response);
+        if (response && response.batchId) {
+          currentBatchId = response.batchId;
+          pendingBatches.set(response.batchId, {
+            status: 'processing',
+            count: failedTranslations.length
+          });
+        }
+      });
+      return;
+    }
 
     // Extract text that is NOT in target language
     const nonTargetTexts = extractNonTargetLanguageText(targetLanguage);
