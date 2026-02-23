@@ -26,14 +26,6 @@
   transform: scale(0.95);
 }
 
-/* Button container */
-#project-translate-container {
-  position: fixed;
-  right: 20px;
-  bottom: 100px;
-  z-index: 999999;
-}
-
 /* Close button */
 #project-translate-close {
   position: absolute;
@@ -53,9 +45,16 @@
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-  transition: transform 0.2s, background 0.2s;
+  transition: transform 0.2s, background 0.2s, opacity 0.2s;
   z-index: 1000000;
   padding: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+#project-translate-float:hover #project-translate-close {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 #project-translate-close:hover {

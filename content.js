@@ -1,10 +1,39 @@
+// Detect language using character patterns (simple approach)
+function detectLanguage(text) {
+  // Check for non-Latin scripts
+  const hasChinese = /[\u4E00-\u9FFF]/.test(text);
+  const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF]/.test(text);
+  const hasKorean = /[\uAC00-\uD7AF]/.test(text);
+  const hasRussian = /[\u0400-\u04FF]/.test(text);
+  const hasHindi = /[\u0900-\u097F]/.test(text);
+  const hasArabic = /[\u0600-\u06FF]/.test(text);
+  const hasHebrew = /[\u0590-\u05FF]/.test(text);
+  const hasThai = /[\u0E00-\u0E7F]/.test(text);
+
+  // Check for Latin with diacritics (European languages)
+  const hasEuropeanDiacritics = /[\xC0-\xFF]/.test(text);
+
+  if (hasChinese) return 'Chinese';
+  if (hasJapanese) return 'Japanese';
+  if (hasKorean) return 'Korean';
+  if (hasRussian) return 'Russian';
+  if (hasHindi) return 'Hindi';
+  if (hasArabic) return 'Arabic';
+  if (hasHebrew) return 'Hebrew';
+  if (hasThai) return 'Thai';
+  if (hasEuropeanDiacritics) return 'European';
+
+  // Default to English for Latin script
+  return 'English';
+}
+
 // Create floating circle button
 const floatingButton = document.createElement('div');
 floatingButton.id = 'project-translate-float';
 floatingButton.innerHTML = '<span>🌐</span>';
 floatingButton.title = 'Project Translate';
 
-// Create close button
+// Create close button attached to floating button
 const closeButton = document.createElement('button');
 closeButton.id = 'project-translate-close';
 closeButton.innerHTML = '×';
@@ -15,24 +44,21 @@ closeButton.addEventListener('click', (e) => {
   closeButton.style.display = 'none';
 });
 
-// Wrap button and close button in container
-const buttonContainer = document.createElement('div');
-buttonContainer.id = 'project-translate-container';
-buttonContainer.appendChild(floatingButton);
-buttonContainer.appendChild(closeButton);
+// Append close button to floating button (not container)
+floatingButton.appendChild(closeButton);
 
-// Drag functionality for container
+// Drag functionality for floating button
 let isDragging = false;
 let startX, startY, initialRight, initialBottom;
 
-buttonContainer.addEventListener('mousedown', (e) => {
+floatingButton.addEventListener('mousedown', (e) => {
   if (e.target === closeButton) return; // Don't drag when clicking close button
 
   isDragging = true;
   startX = e.clientX;
   startY = e.clientY;
 
-  const rect = buttonContainer.getBoundingClientRect();
+  const rect = floatingButton.getBoundingClientRect();
   initialRight = window.innerWidth - rect.right;
   initialBottom = window.innerHeight - rect.bottom;
 
@@ -58,8 +84,8 @@ document.addEventListener('mousemove', (e) => {
   newRight = Math.max(padding, Math.min(maxRight, newRight));
   newBottom = Math.max(padding, Math.min(maxBottom, newBottom));
 
-  buttonContainer.style.right = `${newRight}px`;
-  buttonContainer.style.bottom = `${newBottom}px`;
+  floatingButton.style.right = `${newRight}px`;
+  floatingButton.style.bottom = `${newBottom}px`;
 });
 
 document.addEventListener('mouseup', () => {
@@ -79,32 +105,6 @@ function setButtonState(state) {
   if (state) {
     floatingButton.classList.add(state);
   }
-}
-
-// Import franc for language detection
-import { franc } from 'https://cdn.jsdelivr.net/npm/franc@6.0.0/+esm';
-
-// Map franc language codes to our language names
-const LANGUAGE_MAP = {
-  'eng': 'English',
-  'spa': 'Spanish',
-  'fra': 'French',
-  'deu': 'German',
-  'por': 'Portuguese',
-  'ita': 'Italian',
-  'nld': 'Dutch',
-  'rus': 'Russian',
-  'cmn': 'Chinese',
-  'jpn': 'Japanese',
-  'kor': 'Korean',
-  'hin': 'Hindi',
-  'und': 'Unknown'
-};
-
-// Detect language of text using franc
-function detectLanguage(text) {
-  const francCode = franc(text, { minLength: 3 });
-  return LANGUAGE_MAP[francCode] || 'Unknown';
 }
 
 // Map to track which text nodes belong to which text
@@ -237,13 +237,20 @@ function extractNonTargetLanguageText(targetLanguage) {
       continue;
     }
 
-    // Detect language using franc
+    // Detect language using character patterns
     const detectedLang = detectLanguage(text);
     console.log(`🔍 Detected "${text.substring(0, 30)}..." as ${detectedLang}`);
 
     // Compare with target language
-    if (detectedLang === targetLanguage || detectedLang === 'Unknown') {
-      console.log(`⏭️ Skipping (same as target or unknown): ${detectedLang}`);
+    // Skip if same as target or if it's English (when target is English)
+    if (detectedLang === targetLanguage) {
+      console.log(`⏭️ Skipping (same as target): ${detectedLang}`);
+      continue;
+    }
+
+    // If target is English and detected is European/Latin, skip
+    if (targetLanguage === 'English' && (detectedLang === 'English' || detectedLang === 'European')) {
+      console.log(`⏭️ Skipping (Latin script, likely European): ${detectedLang}`);
       continue;
     }
 
@@ -602,4 +609,27 @@ floatingButton.addEventListener('mouseleave', () => {
 });
 
 // Add to page
-document.body.appendChild(buttonContainer);
+document.body.appendChild(floatingButton);
+
+// Hide button when video is fullscreen
+function checkFullscreen() {
+  const isFullscreen = document.fullscreenElement ||
+                       document.webkitFullscreenElement ||
+                       document.mozFullScreenElement ||
+                       document.msFullscreenElement;
+
+  if (isFullscreen) {
+    floatingButton.style.display = 'none';
+  } else {
+    floatingButton.style.display = 'block';
+  }
+}
+
+// Listen for fullscreen changes
+document.addEventListener('fullscreenchange', checkFullscreen);
+document.addEventListener('webkitfullscreenchange', checkFullscreen);
+document.addEventListener('mozfullscreenchange', checkFullscreen);
+document.addEventListener('MSFullscreenChange', checkFullscreen);
+
+// Initial check
+checkFullscreen();
