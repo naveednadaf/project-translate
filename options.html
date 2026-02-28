@@ -120,7 +120,17 @@
 </head>
 <body>
   <h1>⚙️ Project Translate</h1>
-  
+
+  <div class="option-group">
+    <label for="translationProvider">Translation Provider</label>
+    <select id="translationProvider">
+      <option value="ollama">Ollama (Local LLM)</option>
+      <option value="argos">Argos Translate (Local Server)</option>
+    </select>
+    <div class="hint">Choose between Ollama (local AI) or Argos Translate (local server)</div>
+  </div>
+
+  <div id="ollama-settings">
   <div class="option-group">
     <label for="model">Ollama Model</label>
     <input type="text" id="model" placeholder="llama3.2">
@@ -169,14 +179,56 @@
     <input type="text" id="ollamaUrl" placeholder="http://localhost:11434">
     <div class="hint">URL of your Ollama API endpoint</div>
   </div>
-  
+  </div>
+
+  <div id="argos-settings" style="display: none;">
+  <div class="option-group">
+    <label for="argosUrl">Argos Translate API URL</label>
+    <input type="text" id="argosUrl" placeholder="http://localhost:5000">
+    <div class="hint">URL of your Argos Translate server (e.g., http://192.168.107.2:5000)</div>
+  </div>
+
+  <div class="option-group">
+    <label for="argosSourceLang">Source Language</label>
+    <select id="argosSourceLang">
+      <option value="auto">Auto-detect</option>
+      <option value="zh">Chinese</option>
+      <option value="ja">Japanese</option>
+      <option value="ko">Korean</option>
+      <option value="es">Spanish</option>
+      <option value="fr">French</option>
+      <option value="de">German</option>
+      <option value="pt">Portuguese</option>
+      <option value="ru">Russian</option>
+      <option value="it">Italian</option>
+      <option value="nl">Dutch</option>
+      <option value="hi">Hindi</option>
+      <option value="ar">Arabic</option>
+      <option value="th">Thai</option>
+      <option value="he">Hebrew</option>
+      <option value="en">English</option>
+    </select>
+    <div class="hint">Source language for translation (or auto-detect)</div>
+  </div>
+
+  <div class="option-group">
+    <label>Language Package Status</label>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <button id="testConnection" style="flex: 1; background: #17a2b8; color: white;">Test Connection</button>
+      <button id="installPackage" style="flex: 1; background: #28a745; color: white;">Install Package</button>
+    </div>
+    <div id="packageStatus" style="margin-top: 10px; padding: 10px; border-radius: 6px; font-size: 13px; display: none;"></div>
+    <div class="hint">Test connection and install required language package</div>
+  </div>
+  </div>
+
   <div class="button-group">
     <button id="reset">Reset to Defaults</button>
     <button id="save">Save Settings</button>
   </div>
   
   <div id="status"></div>
-  
+
   <script src="options.js"></script>
 </body>
 </html>

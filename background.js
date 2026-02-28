@@ -1,10 +1,13 @@
 // Ollama API configuration - will be loaded from storage
 let OLLAMA_API_URL = 'http://localhost:11434/api/generate';
+let ARGOS_API_URL = 'http://192.168.107.2:5000/translate';
+let ARGOS_SOURCE_LANG = 'auto';
 let OLLAMA_MODEL = 'llama3.2';
 let TARGET_LANGUAGE = 'English';
 let MAX_CONCURRENT = 3;
 let MAX_RETRIES = 2;
 let TIMEOUT_MS = 30000;
+let TRANSLATION_PROVIDER = 'ollama';
 
 // Default settings
 const DEFAULTS = {
@@ -13,7 +16,10 @@ const DEFAULTS = {
   maxConcurrent: 3,
   maxRetries: 2,
   timeout: 30000,
-  ollamaUrl: 'http://localhost:11434'
+  ollamaUrl: 'http://localhost:11434',
+  argosUrl: 'http://192.168.107.2:5000',
+  argosSourceLang: 'auto',
+  translationProvider: 'ollama'
 };
 
 // Load settings from storage
@@ -25,15 +31,20 @@ async function loadSettings() {
     MAX_CONCURRENT = result.maxConcurrent || DEFAULTS.maxConcurrent;
     MAX_RETRIES = result.maxRetries || DEFAULTS.maxRetries;
     TIMEOUT_MS = result.timeout || DEFAULTS.timeout;
-    OLLAMA_API_URL = (result.ollamaUrl || DEFAULTS.ollamaUrl) + '/api/generate';
+    OLLAMA_API_URL = (result.ollamaUrl || DEFAULTS.ollamaUrl).replace(/\/$/, '') + '/api/generate';
+    ARGOS_API_URL = (result.argosUrl || DEFAULTS.argosUrl).replace(/\/$/, '') + '/translate';
+    TRANSLATION_PROVIDER = result.translationProvider || DEFAULTS.translationProvider;
+    ARGOS_SOURCE_LANG = result.argosSourceLang || DEFAULTS.argosSourceLang;
 
-    console.log('📊 Settings loaded:', {
+    console.log('📊 Settings loaded from storage:', {
+      provider: TRANSLATION_PROVIDER,
       model: OLLAMA_MODEL,
       targetLanguage: TARGET_LANGUAGE,
       maxConcurrent: MAX_CONCURRENT,
       maxRetries: MAX_RETRIES,
       timeout: TIMEOUT_MS,
-      url: OLLAMA_API_URL
+      ollamaUrl: OLLAMA_API_URL,
+      argosUrl: ARGOS_API_URL
     });
   } catch (error) {
     console.error('❌ Failed to load settings:', error);
@@ -42,6 +53,10 @@ async function loadSettings() {
 
 // Load settings on startup
 loadSettings();
+
+// Configure proxy bypass for Argos server (to work with VPN/proxy)
+// Note: Chrome extensions can't directly bypass proxy, but we can use XMLHttpRequest
+// which sometimes bypasses proxy when connecting to local addresses
 
 // Pending responses tracker
 const pendingResponses = new Map();
@@ -269,7 +284,126 @@ async function translateWithTimeout(text, targetLanguage, requestId) {
     // Use the targetLanguage parameter if provided, otherwise use global setting
     const lang = targetLanguage || TARGET_LANGUAGE;
 
-    const prompt = `Translate the following text to ${lang}.
+    console.log(`🔧 Using provider: ${TRANSLATION_PROVIDER}, lang: ${lang}`);
+
+    // Use selected provider
+    if (TRANSLATION_PROVIDER === 'argos') {
+      console.log(`🌐 Calling Argos API: ${ARGOS_API_URL}`);
+      return await translateWithArgos(text, lang, controller, timeoutId, requestId);
+    } else {
+      console.log(`🤖 Calling Ollama API: ${OLLAMA_API_URL}`);
+      return await translateWithOllama(text, lang, controller, timeoutId, requestId);
+    }
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError' || error.message === 'Aborted') {
+      console.log(`🚫 Request aborted: "${text.substring(0, 20)}..."`);
+      throw new Error('Aborted (tab closed)');
+    }
+    throw error;
+  } finally {
+    activeControllers.delete(requestId);
+  }
+}
+
+// Translate using Argos Translate API
+async function translateWithArgos(text, targetLanguage, controller, timeoutId, requestId) {
+  const langMap = {
+    'English': 'en',
+    'Spanish': 'es',
+    'French': 'fr',
+    'German': 'de',
+    'Chinese': 'zh',
+    'Japanese': 'ja',
+    'Korean': 'ko',
+    'Portuguese': 'pt',
+    'Russian': 'ru',
+    'Italian': 'it',
+    'Dutch': 'nl',
+    'Hindi': 'hi'
+  };
+
+  const targetCode = langMap[targetLanguage] || 'en';
+
+  // Use configured source language or auto-detect
+  let sourceCode = ARGOS_SOURCE_LANG;
+  if (sourceCode === 'auto') {
+    sourceCode = detectSourceLanguageCode(text);
+  }
+
+  try {
+    console.log(`📡 Argos request: text="${text.substring(0, 30)}...", source=${sourceCode}, target=${targetCode}`);
+
+    const response = await fetch(ARGOS_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+        'Pragma': 'no-cache'
+      },
+      body: JSON.stringify({
+        q: text,
+        source: sourceCode,
+        target: targetCode
+      }),
+      signal: controller.signal,
+      cache: 'no-store'
+    });
+
+    console.log(`📡 Argos response status: ${response.status} ${response.statusText}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Argos API error: ${response.status} - ${errorText}`);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log(`📡 Argos response data:`, data);
+
+    const translatedText = data.translatedText || text;
+
+    console.log(`🌐 Argos translation: "${text.substring(0, 20)}..." → "${translatedText.substring(0, 20)}..."`);
+
+    return {
+      text: translatedText,
+      success: true
+    };
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError' || error.message === 'Aborted') {
+      throw new Error('Aborted (tab closed)');
+    }
+    throw error;
+  }
+}
+
+// Detect source language code from text
+function detectSourceLanguageCode(text) {
+  // Check for Chinese characters
+  if (/[\u4E00-\u9FFF]/.test(text)) return 'zh';
+  // Check for Japanese (hiragana/katakana)
+  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'ja';
+  // Check for Korean
+  if (/[\uAC00-\uD7AF]/.test(text)) return 'ko';
+  // Check for Russian/Cyrillic
+  if (/[\u0400-\u04FF]/.test(text)) return 'ru';
+  // Check for Hindi/Devanagari
+  if (/[\u0900-\u097F]/.test(text)) return 'hi';
+  // Check for Arabic
+  if (/[\u0600-\u06FF]/.test(text)) return 'ar';
+  // Check for Thai
+  if (/[\u0E00-\u0E7F]/.test(text)) return 'th';
+  // Check for Hebrew
+  if (/[\u0590-\u05FF]/.test(text)) return 'he';
+
+  // Default to English for Latin script
+  return 'en';
+}
+
+// Translate using Ollama API
+async function translateWithOllama(text, targetLanguage, controller, timeoutId, requestId) {
+  const prompt = `Translate the following text to ${targetLanguage}.
 Respond ONLY with a valid JSON object in this exact format:
 {"translation": "your translation here", "success": true}
 
@@ -284,6 +418,7 @@ RULES:
 
 Text to translate: ${text}`;
 
+  try {
     const response = await fetch(OLLAMA_API_URL, {
       method: 'POST',
       headers: {
@@ -324,16 +459,12 @@ Text to translate: ${text}`;
       console.warn('⚠️ Failed to parse JSON, using raw response:', parseError);
       return { text: rawResponse, success: true };
     }
-
   } catch (error) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError' || error.message === 'Aborted') {
-      console.log(`🚫 Request aborted: "${text.substring(0, 20)}..."`);
       throw new Error('Aborted (tab closed)');
     }
     throw error;
-  } finally {
-    activeControllers.delete(requestId);
   }
 }
 
@@ -346,6 +477,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     loadSettings().then(() => {
       sendResponse({ success: true, message: 'Settings reloaded' });
     });
+    return true;
+  }
+
+  // Handle test Argos connection
+  if (message.action === 'testArgosConnection') {
+    testArgosConnection(message.argosUrl, message.targetCode, message.targetLang)
+      .then(result => sendResponse(result))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
+  // Handle install Argos package
+  if (message.action === 'installArgosPackage') {
+    installArgosPackage(message.argosUrl, message.fromCode, message.toCode, message.targetLang)
+      .then(result => sendResponse(result))
+      .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
 
@@ -442,3 +589,95 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 });
+
+// Test Argos connection (called from options page)
+async function testArgosConnection(argosUrl, targetCode, targetLang) {
+  try {
+    // Remove trailing slash
+    const baseUrl = argosUrl.replace(/\/$/, '');
+
+    console.log('🔍 Testing Argos connection to:', baseUrl);
+
+    // Test base URL - use fetch with cache: 'no-store' to bypass some proxy caching
+    const response = await fetch(baseUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Cache-Control': 'no-store',
+        'Pragma': 'no-cache'
+      },
+      cache: 'no-store'
+    });
+
+    console.log('📊 Base response status:', response.status);
+
+    if (!response.ok) {
+      return { success: false, error: `HTTP ${response.status}` };
+    }
+
+    const data = await response.json();
+    console.log('📊 Base response data:', data);
+
+    // Check installed packages
+    const packagesResponse = await fetch(`${baseUrl}/installed-packages`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Cache-Control': 'no-store',
+        'Pragma': 'no-cache'
+      },
+      cache: 'no-store'
+    });
+
+    console.log('📊 Packages response status:', packagesResponse.status);
+
+    if (!packagesResponse.ok) {
+      return { success: false, error: `HTTP ${packagesResponse.status}` };
+    }
+
+    const packages = await packagesResponse.json();
+    console.log('📊 Packages data:', packages);
+
+    // Check if package is installed
+    const installedPackages = packages.packages || [];
+    const hasPackage = installedPackages.some(p =>
+      (p.from_code === 'zh' && p.to_code === targetCode) ||
+      (p.includes && p.includes(`${targetCode}`))
+    );
+
+    console.log('📊 Package check result:', hasPackage);
+
+    return { success: true, packageInstalled: hasPackage };
+
+  } catch (error) {
+    console.error('❌ Test connection error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Install Argos package (called from options page)
+async function installArgosPackage(argosUrl, fromCode, toCode, targetLang) {
+  try {
+    // Remove trailing slash
+    const baseUrl = argosUrl.replace(/\/$/, '');
+
+    const installResponse = await fetch(`${baseUrl}/install-package?from_code=${fromCode}&to_code=${toCode}`, {
+      method: 'POST',
+      headers: {
+        'Cache-Control': 'no-store',
+        'Pragma': 'no-cache'
+      },
+      cache: 'no-store'
+    });
+
+    if (!installResponse.ok) {
+      const errorData = await installResponse.json();
+      return { success: false, error: errorData.detail || `HTTP ${installResponse.status}` };
+    }
+
+    return { success: true };
+
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}

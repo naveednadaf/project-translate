@@ -10,8 +10,12 @@ function detectLanguage(text) {
   const hasHebrew = /[\u0590-\u05FF]/.test(text);
   const hasThai = /[\u0E00-\u0E7F]/.test(text);
 
-  // Check for Latin with diacritics (European languages)
-  const hasEuropeanDiacritics = /[\xC0-\xFF]/.test(text);
+  // Check for specific European language diacritics
+  const hasGerman = /[äÄöÖüÜß]/.test(text);
+  const hasFrench = /[àâçéèêëïîôùûüÿœŒ]/.test(text);
+  const hasSpanish = /[áéíóúñ¿¡]/.test(text);
+  const hasPortuguese = /[ãõçáéíóú]/.test(text);
+  const hasItalian = /[àèéìíòóùú]/.test(text);
 
   if (hasChinese) return 'Chinese';
   if (hasJapanese) return 'Japanese';
@@ -21,9 +25,13 @@ function detectLanguage(text) {
   if (hasArabic) return 'Arabic';
   if (hasHebrew) return 'Hebrew';
   if (hasThai) return 'Thai';
-  if (hasEuropeanDiacritics) return 'European';
+  if (hasGerman) return 'German';
+  if (hasFrench) return 'French';
+  if (hasSpanish) return 'Spanish';
+  if (hasPortuguese) return 'Portuguese';
+  if (hasItalian) return 'Italian';
 
-  // Default to English for Latin script
+  // Default to English for basic Latin script
   return 'English';
 }
 
@@ -249,15 +257,9 @@ function extractNonTargetLanguageText(targetLanguage) {
     console.log(`🔍 Detected "${text.substring(0, 30)}..." as ${detectedLang}`);
 
     // Compare with target language
-    // Skip if same as target or if it's English (when target is English)
+    // Skip if same as target
     if (detectedLang === targetLanguage) {
       console.log(`⏭️ Skipping (same as target): ${detectedLang}`);
-      continue;
-    }
-
-    // If target is English and detected is European/Latin, skip
-    if (targetLanguage === 'English' && (detectedLang === 'English' || detectedLang === 'European')) {
-      console.log(`⏭️ Skipping (Latin script, likely European): ${detectedLang}`);
       continue;
     }
 
