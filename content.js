@@ -122,42 +122,80 @@ const textToNodesMap = new Map();
 
 function extractNonEnglishText() {
   const nonEnglishTexts = [];
+  const processedNodes = new Set();
 
-  const walker = document.createTreeWalker(
-    document.body,
-    NodeFilter.SHOW_TEXT,
-    {
-      acceptNode: (node) => {
-        // Skip script, style, and hidden elements
-        const parent = node.parentElement;
-        if (!parent || parent.closest('script, style, noscript, meta, link')) {
+  // Recursive function to walk through shadow DOM as well
+  function walkTree(root) {
+    const walker = document.createTreeWalker(
+      root,
+      NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+      {
+        acceptNode: (node) => {
+          // Handle text nodes
+          if (node.nodeType === Node.TEXT_NODE) {
+            const parent = node.parentElement;
+            if (!parent) {
+              return NodeFilter.FILTER_REJECT;
+            }
+
+            // Skip script, style, and hidden elements
+            if (parent.closest('script, style, noscript, meta, link')) {
+              return NodeFilter.FILTER_REJECT;
+            }
+
+            // Skip if already translated in this session
+            if (parent.classList.contains('project-translate-done')) {
+              return NodeFilter.FILTER_REJECT;
+            }
+
+            // Skip empty or whitespace-only nodes
+            const text = node.textContent.trim();
+            if (!text || text.length < 2) {
+              return NodeFilter.FILTER_REJECT;
+            }
+
+            // Skip if element is not visible
+            if (!isElementVisible(parent)) {
+              return NodeFilter.FILTER_REJECT;
+            }
+
+            return NodeFilter.FILTER_ACCEPT;
+          }
+
+          // Handle element nodes - check for shadow DOM
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            // Skip script, style tags
+            if (node.tagName === 'SCRIPT' || node.tagName === 'STYLE') {
+              return NodeFilter.FILTER_REJECT;
+            }
+            return NodeFilter.FILTER_SKIP;
+          }
+
           return NodeFilter.FILTER_REJECT;
         }
+      }
+    );
 
-        // Skip if already translated in this session
-        if (parent.classList.contains('project-translate-done')) {
-          return NodeFilter.FILTER_REJECT;
-        }
-
-        // Skip empty or whitespace-only nodes
-        const text = node.textContent.trim();
-        if (!text || text.length < 2) {
-          return NodeFilter.FILTER_REJECT;
-        }
-
-        // Skip if element is not visible
-        if (!isElementVisible(parent)) {
-          return NodeFilter.FILTER_REJECT;
-        }
-
-        return NodeFilter.FILTER_ACCEPT;
+    const nodes = [];
+    let currentNode;
+    while ((currentNode = walker.nextNode())) {
+      if (currentNode.nodeType === Node.TEXT_NODE && !processedNodes.has(currentNode)) {
+        nodes.push(currentNode);
+        processedNodes.add(currentNode);
+      }
+      // Check for shadow DOM
+      if (currentNode.nodeType === Node.ELEMENT_NODE && currentNode.shadowRoot) {
+        nodes.push(...walkTree(currentNode.shadowRoot));
       }
     }
-  );
+    return nodes;
+  }
+
+  // Walk through document body and all shadow DOMs
+  const textNodes = walkTree(document.body);
 
   // Collect all text nodes
-  let currentNode;
-  while ((currentNode = walker.nextNode())) {
+  textNodes.forEach(currentNode => {
     const text = currentNode.textContent.trim();
 
     // Check if text contains non-English characters
@@ -165,7 +203,7 @@ function extractNonEnglishText() {
       // Skip emojis, symbols, arrows, meaningless text using regex
       if (shouldSkipText(text)) {
         console.log('⏭️ Skipping (symbols/emojis/short):', text);
-        continue;
+        return;
       }
 
       // Extract only non-English parts from mixed text
@@ -191,7 +229,7 @@ function extractNonEnglishText() {
         });
       }
     }
-  }
+  });
 
   return [...new Set(nonEnglishTexts)]; // Unique texts only
 }
@@ -199,57 +237,98 @@ function extractNonEnglishText() {
 // Extract text that is NOT in the target language
 function extractNonTargetLanguageText(targetLanguage) {
   const nonTargetTexts = [];
+  const processedNodes = new Set();
 
-  const walker = document.createTreeWalker(
-    document.body,
-    NodeFilter.SHOW_TEXT,
-    {
-      acceptNode: (node) => {
-        const parent = node.parentElement;
-        if (!parent || parent.closest('script, style, noscript, meta, link')) {
-          return NodeFilter.FILTER_REJECT;
-        }
+  // Recursive function to walk through shadow DOM as well
+  function walkTree(root) {
+    const walker = document.createTreeWalker(
+      root,
+      NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+      {
+        acceptNode: (node) => {
+          // Handle text nodes
+          if (node.nodeType === Node.TEXT_NODE) {
+            const parent = node.parentElement;
+            if (!parent) {
+              return NodeFilter.FILTER_REJECT;
+            }
 
-        // Skip breadcrumb navigation only (not all links)
-        if (parent.closest('[aria-label*="breadcrumb"], .breadcrumb, nav[aria-label*="Breadcrumb"]')) {
-          return NodeFilter.FILTER_REJECT;
-        }
+            // Skip script, style, and hidden elements
+            if (parent.closest('script, style, noscript, meta, link')) {
+              return NodeFilter.FILTER_REJECT;
+            }
 
-        // Skip links that are clearly navigation/URL patterns (not content links)
-        if (parent.tagName === 'A') {
-          const href = parent.href || '';
-          const text = parent.textContent.trim();
-          // Skip if href is just a path like /store/apps/details
-          if (href.match(/^\/[a-z\/]+$/i) || text.match(/^›.*›.*›$/)) {
-            return NodeFilter.FILTER_REJECT;
+            // Skip breadcrumb navigation only (not all links)
+            if (parent.closest('[aria-label*="breadcrumb"], .breadcrumb, nav[aria-label*="Breadcrumb"]')) {
+              return NodeFilter.FILTER_REJECT;
+            }
+
+            // Skip links that are clearly navigation/URL patterns (not content links)
+            if (parent.tagName === 'A') {
+              const href = parent.href || '';
+              const text = parent.textContent.trim();
+              // Skip if href is just a path like /store/apps/details
+              if (href.match(/^\/[a-z\/]+$/i) || text.match(/^›.*›.*›$/)) {
+                return NodeFilter.FILTER_REJECT;
+              }
+            }
+
+            // Skip if already translated in this session
+            if (parent.classList.contains('project-translate-done')) {
+              return NodeFilter.FILTER_REJECT;
+            }
+
+            const text = node.textContent.trim();
+            if (!text || text.length < 2) {
+              return NodeFilter.FILTER_REJECT;
+            }
+
+            // Skip if element is not visible
+            if (!isElementVisible(parent)) {
+              return NodeFilter.FILTER_REJECT;
+            }
+
+            return NodeFilter.FILTER_ACCEPT;
           }
-        }
 
-        if (parent.classList.contains('project-translate-done')) {
+          // Handle element nodes - check for shadow DOM
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            // Skip script, style tags
+            if (node.tagName === 'SCRIPT' || node.tagName === 'STYLE') {
+              return NodeFilter.FILTER_REJECT;
+            }
+            return NodeFilter.FILTER_SKIP;
+          }
+
           return NodeFilter.FILTER_REJECT;
         }
+      }
+    );
 
-        const text = node.textContent.trim();
-        if (!text || text.length < 2) {
-          return NodeFilter.FILTER_REJECT;
-        }
-
-        if (!isElementVisible(parent)) {
-          return NodeFilter.FILTER_REJECT;
-        }
-
-        return NodeFilter.FILTER_ACCEPT;
+    const nodes = [];
+    let currentNode;
+    while ((currentNode = walker.nextNode())) {
+      if (currentNode.nodeType === Node.TEXT_NODE && !processedNodes.has(currentNode)) {
+        nodes.push(currentNode);
+        processedNodes.add(currentNode);
+      }
+      // Check for shadow DOM
+      if (currentNode.nodeType === Node.ELEMENT_NODE && currentNode.shadowRoot) {
+        nodes.push(...walkTree(currentNode.shadowRoot));
       }
     }
-  );
+    return nodes;
+  }
 
-  let currentNode;
-  while ((currentNode = walker.nextNode())) {
+  // Walk through document body and all shadow DOMs
+  const textNodes = walkTree(document.body);
+
+  textNodes.forEach(currentNode => {
     const text = currentNode.textContent.trim();
 
     if (shouldSkipText(text)) {
       console.log('⏭️ Skipping (symbols/emojis/short/URL):', text);
-      continue;
+      return;
     }
 
     // Detect language using character patterns
@@ -260,7 +339,7 @@ function extractNonTargetLanguageText(targetLanguage) {
     // Skip if same as target
     if (detectedLang === targetLanguage) {
       console.log(`⏭️ Skipping (same as target): ${detectedLang}`);
-      continue;
+      return;
     }
 
     // Different language - add to translation queue
@@ -271,7 +350,7 @@ function extractNonTargetLanguageText(targetLanguage) {
       textToNodesMap.set(text, new Set());
     }
     textToNodesMap.get(text).add(currentNode);
-  }
+  });
 
   return [...new Set(nonTargetTexts)];
 }
@@ -374,12 +453,6 @@ function shouldSkipText(text) {
 
     // Only control characters / zero-width
     /^[\u0000-\u001F\u007F-\u009F]+$/,
-
-    // Only numbers and Latin caps (likely codes)
-    /^[A-Z0-9\s]+$/,
-
-    // Only punctuation/symbols
-    /^[\s\p{P}\p{S}]+$/u,
   ];
 
   // Check if text matches any skip pattern
@@ -579,6 +652,8 @@ floatingButton.addEventListener('click', () => {
     });
     setButtonState(null);
     isTranslationActive = false;
+    textToNodesMap.clear();
+    completedTranslations = [];
     return;
   }
 
@@ -715,3 +790,46 @@ document.addEventListener('MSFullscreenChange', checkFullscreen);
 
 // Initial check
 checkFullscreen();
+
+// Listen for messages from background (context menu)
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'translateSelectedText') {
+    console.log('🌐 Received selected text to translate:', message.text);
+
+    // Find the selected text node
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      const selectedNode = range.commonAncestorContainer;
+
+      console.log('📍 Selected node:', selectedNode);
+
+      // Store mapping for this text
+      if (!textToNodesMap.has(message.text)) {
+        textToNodesMap.set(message.text, new Set());
+      }
+
+      // Store the node reference
+      if (selectedNode.nodeType === Node.TEXT_NODE) {
+        textToNodesMap.get(message.text).add(selectedNode);
+      } else if (selectedNode.nodeType === Node.ELEMENT_NODE) {
+        // If element, try to find the text node within the selection
+        try {
+          const textNode = range.startContainer;
+          if (textNode.nodeType === Node.TEXT_NODE) {
+            textToNodesMap.get(message.text).add(textNode);
+          }
+        } catch (e) {
+          console.warn('⚠️ Could not get text node from selection:', e);
+        }
+      }
+
+      sendResponse({ success: true });
+    } else {
+      console.warn('⚠️ No selection found');
+      sendResponse({ success: false, error: 'No selection found' });
+    }
+
+    return true;
+  }
+});

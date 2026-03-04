@@ -54,6 +54,48 @@ async function loadSettings() {
 // Load settings on startup
 loadSettings();
 
+// Create context menu item
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: 'translateSelection',
+    title: 'Translate with Project Translate',
+    contexts: ['selection']
+  });
+});
+
+// Handle context menu click
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === 'translateSelection' && info.selectionText) {
+    console.log('🌐 Context menu: translating selection:', info.selectionText);
+
+    const batchId = Date.now();
+
+    // Track this batch per tab
+    if (!tabBatches.has(tab.id)) {
+      tabBatches.set(tab.id, []);
+    }
+    tabBatches.get(tab.id).push(batchId);
+
+    // Track this batch
+    pendingResponses.set(batchId, {
+      results: [],
+      completed: 0,
+      total: 1,
+      tabId: tab.id
+    });
+
+    // Send to content script to replace selected text
+    chrome.tabs.sendMessage(tab.id, {
+      action: 'translateSelectedText',
+      text: info.selectionText,
+      batchId: batchId
+    });
+
+    // Add to translation queue
+    translationQueue.add(new QueueItem(info.selectionText, TARGET_LANGUAGE, batchId, tab.id));
+  }
+});
+
 // Configure proxy bypass for Argos server (to work with VPN/proxy)
 // Note: Chrome extensions can't directly bypass proxy, but we can use XMLHttpRequest
 // which sometimes bypasses proxy when connecting to local addresses

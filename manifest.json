@@ -3,7 +3,7 @@
   "name": "Project Translate",
   "version": "1.0.0",
   "description": "A Chrome extension with floating button",
-  "permissions": ["tabs", "storage", "proxy"],
+  "permissions": ["tabs", "storage", "proxy", "contextMenus"],
   "host_permissions": ["http://localhost:11434/*", "http://localhost:5000/*", "http://192.168.107.2:5000/*", "<all_urls>"],
   "background": {
     "service_worker": "background.js"
