@@ -378,6 +378,18 @@ function isElementVisible(element) {
     return false;
   }
 
+  // Check if element has near-zero dimensions (anti-scraping technique)
+  const rect = element.getBoundingClientRect();
+  if (rect.width < 1 || rect.height < 1) {
+    return false;
+  }
+
+  // Check for font-size: 0 or very small (common anti-scraping trick)
+  const fontSize = parseFloat(style.fontSize);
+  if (fontSize < 1) {
+    return false;
+  }
+
   // Check if inside a hidden parent
   let parent = element;
   while (parent && parent !== document.body) {
@@ -385,14 +397,20 @@ function isElementVisible(element) {
     if (parentStyle.display === 'none' || parentStyle.visibility === 'hidden') {
       return false;
     }
+    // Also check parent's dimensions
+    const parentRect = parent.getBoundingClientRect();
+    if (parentRect.width < 1 || parentRect.height < 1) {
+      return false;
+    }
+    // Check parent's font-size
+    const parentFontSize = parseFloat(parentStyle.fontSize);
+    if (parentFontSize < 1) {
+      return false;
+    }
     parent = parent.parentElement;
   }
 
   // Check if element has actual dimensions
-  const rect = element.getBoundingClientRect();
-
-  // Allow elements that are in the document flow (have width/height or content)
-  // This includes elements below the fold (scrollable area)
   if (rect.width > 0 || rect.height > 0 || element.childNodes.length > 0) {
     return true;
   }
